@@ -40,10 +40,15 @@ class TestSource {
                         Token.BEGIN_TABLE, Token.CELL,
                         Token.BEGIN_TABLE, Token.CELL, Token.CELL, Token.CELL,
                         Token.END_TABLE, Token.END_TABLE, Token.END_TABLE, Token.END_TABLE))
+
         val counts = arrayOf(
                 listOf(1),
                 listOf(1, 4),
                 listOf(1, 1, 1, 3))
+
+        const val incorrectSample = "<table><tr><tl></table>"
+
+        val incorrectTokens = listOf(Token.BEGIN_TABLE, Token.CELL)
     }
 
 
@@ -69,5 +74,15 @@ class TestSource {
             assertThat(countCells(it, 1, result)).isEqualTo(tokens[i].size)
             assertThat(result).containsExactlyElementsIn(counts[i])
         }
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun testIncorrectTag() {
+        tokenize(incorrectSample)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun testIncorrectTokens() {
+        countCells(incorrectTokens, 1, mutableListOf())
     }
 }
