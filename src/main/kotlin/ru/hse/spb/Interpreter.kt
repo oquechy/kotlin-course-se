@@ -5,18 +5,15 @@ import org.antlr.v4.runtime.tree.TerminalNode
 import ru.hse.spb.parser.ExpBaseVisitor
 import ru.hse.spb.parser.ExpParser
 
-class Interpreter : ExpBaseVisitor<Int?>() {
+class Interpreter(rootScope: Scope) : ExpBaseVisitor<Int?>() {
 
-    private var scope = MutableScope()
-    fun getScope(): Scope = scope
-
+    private var scope = MutableScope(rootScope)
     private var returnValue: Int? = null
-    fun getReturnValue(): Int? = returnValue
 
     override fun visitFile(ctx: ExpParser.FileContext): Int? = visit(ctx.block())
 
     override fun visitBlock(ctx: ExpParser.BlockContext): Int? {
-        ctx.statement().forEach { if (returnValue != null) return returnValue else visit(it) }
+        ctx.statement().forEach { if (returnValue != null) return null else visit(it) }
         return null
     }
 
@@ -39,7 +36,21 @@ class Interpreter : ExpBaseVisitor<Int?>() {
     }
 
     override fun visitFunction(ctx: ExpParser.FunctionContext): Int? {
-        scope.storeFunction(ctx.Identifier(), ctx)
+        scope.storeFunction(ctx.Identifier()) { args ->
+            val identifiers = ctx.parameterNames().Identifier()
+            if (args.size != identifiers.size)
+                throw RuntimeException("${ctx.start.line}:${ctx.start.charPositionInLine} " +
+                        "${ctx.Identifier()} takes ${identifiers.size} args, but found ${args.size}")
+
+            scope = MutableScope(scope)
+            identifiers.zip(args).forEach { scope.storeValue(it.first, it.second) }
+            visit(ctx.block())
+            val parent = scope.parent
+            scope = parent as? MutableScope ?: throw RuntimeException(
+                    "${ctx.start.line}:${ctx.start.charPositionInLine} end of global scope reached")
+            val i = returnValue.also { returnValue = null } ?: 0
+            i
+        }
         return null
     }
 
@@ -54,16 +65,21 @@ class Interpreter : ExpBaseVisitor<Int?>() {
     override fun visitBlockWithBraces(ctx: ExpParser.BlockWithBracesContext): Int? {
         scope = MutableScope(scope)
         visit(ctx.block())
-        scope = scope.parent ?: throw RuntimeException("${ctx.start.line}:${ctx.start.charPositionInLine} end of global scope reached")
+        val parent = scope.parent
+        scope = parent as? MutableScope
+                ?: throw RuntimeException("${ctx.start.line}:${ctx.start.charPositionInLine} end of global scope reached")
         return null
     }
 
     override fun visitCondition(ctx: ExpParser.ConditionContext): Int? {
         val cases = ctx.blockWithBraces()
-        return if (ensureVisit(ctx.expression()).boolean) visit(cases.first()) else visit(cases.last())
+        if (ensureVisit(ctx.expression()).boolean) visit(cases.first()) else if (cases.size > 1) visit(cases.last())
+        return null
     }
 
-    override fun visitReturnStatement(ctx: ExpParser.ReturnStatementContext): Int? = ensureVisit(ctx.expression()).also { returnValue = it }
+    override fun visitReturnStatement(ctx: ExpParser.ReturnStatementContext): Int? {
+        return ensureVisit(ctx.expression()).also { returnValue = it }
+    }
 
     override fun visitOrExpression(ctx: ExpParser.OrExpressionContext): Int? {
         if (ctx.orExpression() == null)
@@ -100,20 +116,18 @@ class Interpreter : ExpBaseVisitor<Int?>() {
         return operation(ensureVisit(ctx.atomExpression()), ensureVisit(ctx.multiplicativeExpression()))
     }
 
-    override fun visitAtomExpression(ctx: ExpParser.AtomExpressionContext): Int? = ensureVisit(ctx.children.first() as ParserRuleContext)
+    override fun visitAtomExpression(ctx: ExpParser.AtomExpressionContext): Int = ensureVisit(ctx.children.first() as ParserRuleContext)
 
-    override fun visitLiteral(ctx: ExpParser.LiteralContext): Int? = ctx.text.toInt()
+    override fun visitLiteral(ctx: ExpParser.LiteralContext): Int = ctx.text.toInt()
 
-    override fun visitIdentifier(ctx: ExpParser.IdentifierContext): Int? = scope.loadValue(ctx.Identifier())
+    override fun visitIdentifier(ctx: ExpParser.IdentifierContext): Int = scope.loadValue(ctx.Identifier())
 
-    override fun visitExpressionWithBraces(ctx: ExpParser.ExpressionWithBracesContext): Int? = ensureVisit(ctx.expression())
+    override fun visitExpressionWithBraces(ctx: ExpParser.ExpressionWithBracesContext): Int = ensureVisit(ctx.expression())
 
-    override fun visitFunctionCall(ctx: ExpParser.FunctionCallContext): Int? {
+    override fun visitFunctionCall(ctx: ExpParser.FunctionCallContext): Int {
         val function = scope.loadFunction(ctx.Identifier())
         val values = ctx.arguments().expression().map { ensureVisit(it) }
-        function.parameterNames().Identifier().zip(values).forEach { scope.storeValue(it.first, it.second) }
-        visit(function.blockWithBraces())
-        return returnValue.also { returnValue = null }
+        return function(values)
     }
 
     private fun toOperation(token: TerminalNode, ctx: ParserRuleContext): (Int, Int) -> Int = when (token.text) {

@@ -2,22 +2,22 @@ grammar Exp;
 
 file : block;
 
-block : statement *;
+block :  statement *;
 
 blockWithBraces : '{' block '}';
 
 statement
-    : function
+    : expression
+    | function
+    | returnStatement
     | variable
-    | expression
     | whileLoop
     | condition
     | assignment
-    | returnStatement
     ;
 
 function
-    : 'fun' Identifier '(' parameterNames ')' blockWithBraces;
+    : 'fun' Identifier '(' parameterNames ')' '{' block '}';
 
 variable
     : 'var' Identifier ( '=' expression ) ?;
@@ -42,8 +42,8 @@ expression
 
 atomExpression
     : functionCall
-    | identifier
     | literal
+    | identifier
     | expressionWithBraces
     ;
 
@@ -57,7 +57,7 @@ functionCall
     : Identifier '(' arguments ')';
 
 arguments
-    : ( ( expression ',' ) * expression ) ?;
+    : ( expression ( ',' expression ) * ) ?;
 
 /*
     Арифметическое выражение с операциями: +, -, *, /, %, >, <, >=, <=, ==, !=, ||, &&
@@ -65,28 +65,28 @@ arguments
 */
 
 orExpression
-    : andExpression
-    | andExpression OrOp orExpression
+    : andExpression OrOp orExpression
+    | andExpression
     ;
 
 andExpression
-    : relationalExpression
-    | relationalExpression AndOp andExpression
+    : relationalExpression AndOp andExpression
+    | relationalExpression
     ;
 
 relationalExpression
-    : additiveExpression
-    | additiveExpression RelationalOp relationalExpression
+    : additiveExpression RelationalOp relationalExpression
+    | additiveExpression
     ;
 
 additiveExpression
-    : multiplicativeExpression
-    | multiplicativeExpression AdditiveOp additiveExpression
+    : multiplicativeExpression AdditiveOp additiveExpression
+    | multiplicativeExpression
     ;
 
 multiplicativeExpression
-    : atomExpression
-    | atomExpression MultiplicativeOp multiplicativeExpression
+    : atomExpression MultiplicativeOp multiplicativeExpression
+    | atomExpression
     ;
 
 MultiplicativeOp : '*' | '/' | '%' ;

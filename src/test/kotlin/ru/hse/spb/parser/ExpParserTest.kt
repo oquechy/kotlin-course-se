@@ -18,8 +18,7 @@ class ExpParserTest {
                 """(file
                     |(block
                     |(statement
-                    |(function fun foo ( (parameterNames a , b) )
-                    |(blockWithBraces {
+                    |(function fun foo ( (parameterNames a , b) ) {
                     |(block
                     |(statement
                     |(returnStatement return
@@ -31,7 +30,7 @@ class ExpParserTest {
                     |(multiplicativeExpression
                     |(atomExpression
                     |(literal 0)))))))))))
-                    |})))))""".trimMargin().replace('\n', ' ')))
+                    |}))))""".trimMargin().replace('\n', ' ')))
     }
 
     @Test

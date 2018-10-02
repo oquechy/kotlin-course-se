@@ -6,12 +6,14 @@ import ru.hse.spb.parser.ExpLexer
 import ru.hse.spb.parser.ExpParser
 
 fun main(args: Array<String>) {
-    val expLexer = ExpLexer(CharStreams.fromString(
-            """var a = 10"""
-                    .trimMargin()))
+    if (args.size != 1) {
+        println("Pass a filename as the only argument")
+        return
+    }
+
+    val expLexer = ExpLexer(CharStreams.fromFileName(args[0]))
     val parser = ExpParser(BufferedTokenStream(expLexer))
     val file = parser.file()
-    print(file.toStringTree(parser))
-    val interpreter = Interpreter()
+    val interpreter = Interpreter(Library())
     interpreter.visit(file)
 }
