@@ -42,14 +42,11 @@ class Interpreter(rootScope: Scope) : ExpBaseVisitor<Int?>() {
                 throw RuntimeException("${ctx.start.line}:${ctx.start.charPositionInLine} " +
                         "${ctx.Identifier()} takes ${identifiers.size} args, but found ${args.size}")
 
-            scope = MutableScope(scope)
-            identifiers.zip(args).forEach { scope.storeValue(it.first, it.second) }
-            visit(ctx.block())
-            val parent = scope.parent
-            scope = parent as? MutableScope ?: throw RuntimeException(
-                    "${ctx.start.line}:${ctx.start.charPositionInLine} end of global scope reached")
-            val i = returnValue.also { returnValue = null } ?: 0
-            i
+            nestScope(ctx) {
+                identifiers.zip(args).forEach { scope.storeValue(it.first, it.second) }
+                visit(ctx.block())
+            }
+            returnValue.also { returnValue = null } ?: 0
         }
         return null
     }
@@ -63,11 +60,9 @@ class Interpreter(rootScope: Scope) : ExpBaseVisitor<Int?>() {
     }
 
     override fun visitBlockWithBraces(ctx: ExpParser.BlockWithBracesContext): Int? {
-        scope = MutableScope(scope)
-        visit(ctx.block())
-        val parent = scope.parent
-        scope = parent as? MutableScope
-                ?: throw RuntimeException("${ctx.start.line}:${ctx.start.charPositionInLine} end of global scope reached")
+        nestScope(ctx) {
+            visit(ctx.block())
+        }
         return null
     }
 
@@ -116,7 +111,8 @@ class Interpreter(rootScope: Scope) : ExpBaseVisitor<Int?>() {
         return operation(ensureVisit(ctx.atomExpression()), ensureVisit(ctx.multiplicativeExpression()))
     }
 
-    override fun visitAtomExpression(ctx: ExpParser.AtomExpressionContext): Int = ensureVisit(ctx.children.first() as ParserRuleContext)
+    override fun visitAtomExpression(ctx: ExpParser.AtomExpressionContext): Int
+            = ensureVisit(ctx.children.first() as ParserRuleContext)
 
     override fun visitLiteral(ctx: ExpParser.LiteralContext): Int = ctx.text.toInt()
 
@@ -149,6 +145,13 @@ class Interpreter(rootScope: Scope) : ExpBaseVisitor<Int?>() {
 
     private fun ensureVisit(ctx: ParserRuleContext) =
             visit(ctx) ?: throw ReturnValueException(ctx)
+
+    private inline fun nestScope(ctx: ParserRuleContext, f: () -> Unit) {
+        scope = MutableScope(scope)
+        f()
+        scope = scope.parent as? MutableScope
+                ?: throw RuntimeException("${ctx.start.line}:${ctx.start.charPositionInLine} end of global scope reached")
+    }
 }
 
 private val Boolean.int: Int
