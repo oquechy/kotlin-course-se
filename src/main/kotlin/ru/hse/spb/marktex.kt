@@ -24,23 +24,16 @@ class MathElement(private val formula: String) : Element {
 annotation class TexMarker
 
 @TexMarker
-abstract class ControlElement(args: Array<out String>, optional: Array<out String>) : Element {
-    private val optionalArguments = arrayListOf<String>()
-    private val requiredArguments = arrayListOf<String>()
+abstract class ControlElement(private val requiredArguments: ArrayList<String> = arrayListOf(), private val optionalArguments: ArrayList<String> = arrayListOf()) : Element {
     protected val children = arrayListOf<Element>()
 
-    init {
-        requiredArguments.addAll(args)
-        optionalArguments.addAll(optional)
-    }
-
     fun addArguments(arg: String) {
-        requiredArguments.add(arg)
+        requiredArguments += arg
     }
 
     protected fun <T : Element> initChild(element: T, init: T.() -> Unit) {
         element.init()
-        children.add(element)
+        children += element
     }
 
     fun renderArguments(output: Writer) {
@@ -55,7 +48,7 @@ abstract class ControlElement(args: Array<out String>, optional: Array<out Strin
 }
 
 open class Command(private val name: String, arg: String? = null, vararg optional: String)
-    : ControlElement(if (arg != null) arrayOf(arg) else arrayOf(), optional) {
+    : ControlElement(if (arg != null) arrayListOf(arg) else arrayListOf(), arrayListOf(*optional)) {
     override fun render(output: Writer, indent: String) {
         output.write("$indent\\$name")
         renderArguments(output)
@@ -64,7 +57,7 @@ open class Command(private val name: String, arg: String? = null, vararg optiona
 }
 
 open class Environment(protected val name: String, arg: String? = null, vararg optional: String)
-    : ControlElement(if (arg != null) arrayOf(arg) else arrayOf(), optional) {
+    : ControlElement(if (arg != null) arrayListOf(arg) else arrayListOf(), arrayListOf(*optional)) {
     override fun render(output: Writer, indent: String) {
         output.write("$indent\\begin{$name}")
         renderArguments(output)
@@ -79,11 +72,11 @@ open class Environment(protected val name: String, arg: String? = null, vararg o
 open class EnvironmentWithText(name: String, arg: String? = null, vararg optional: String)
     : Environment(name, arg, *optional) {
     operator fun String.unaryPlus() {
-        children.add(TextElement(this))
+        children += TextElement(this)
     }
 
     operator fun String.not() {
-        children.add(MathElement(this))
+        children += MathElement(this)
     }
 
     fun itemize(vararg optional: String, init: Itemize.() -> Unit) = initChild(Itemize(*optional), init)
@@ -102,12 +95,13 @@ class Document : EnvironmentWithText("document") {
             initChild(Frame(title, *optional), init)
 
     override fun render(output: Writer, indent: String) {
-        for (c in children.filter { it is DocumentClass || it is Package }) {
+        val (documentClassOrPackages, other) = children.partition { it is DocumentClass || it is Package }
+        for (c in documentClassOrPackages) {
             c.render(output, indent)
         }
         output.write("$indent\\begin{$name}")
         output.write("\n")
-        for (c in children.filter { it !is DocumentClass && it !is Package }) {
+        for (c in other) {
             c.render(output, "$indent  ")
         }
         output.write("$indent\\end{$name}\n")
@@ -118,8 +112,7 @@ class Document : EnvironmentWithText("document") {
 
 fun document(init: Document.() -> Unit): Document {
     val document = Document()
-    document.init()
-    return document
+    return document.apply(init)
 }
 
 class DocumentClass(documentClass: String, vararg optional: String)
